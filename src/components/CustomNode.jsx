@@ -1,70 +1,149 @@
+import { memo, createContext, useContext } from 'react';
 import { Handle, Position } from 'reactflow';
-import { Play, GitPullRequest, AlertCircle, Clock, Webhook } from 'lucide-react';
+import {
+  Play,
+  GitPullRequest,
+  GitBranch,
+  AlertCircle,
+  GitMerge,
+  MessageSquare,
+  Clock,
+  Webhook,
+  X,
+} from 'lucide-react';
 
-const CustomNode = ({ data }) => {
-  const getNodeIcon = () => {
-    switch (data.type) {
-      case 'TRIGGER':
-        if (data.subtype === 'WEBHOOK') {
-          return <Webhook size={20} className="text-emerald-600" />;
-        }
-        return <Play size={20} className="text-green-600" />;
-      case 'ACTION':
-        return <GitPullRequest size={20} className="text-blue-600" />;
-      case 'CONDITION':
-        return <AlertCircle size={20} className="text-yellow-600" />;
-      case 'DELAY':
-        return <Clock size={20} className="text-purple-600" />;
-      default:
-        return <AlertCircle size={20} className="text-gray-600" />;
-    }
-  };
+// Lets nodes call back into the builder to remove themselves,
+// without storing a function on node.data (which gets serialized).
+export const NodeActionsContext = createContext({ onDelete: () => {} });
 
-  const getNodeColor = () => {
-    switch (data.type) {
-      case 'TRIGGER':
-        return 'border-green-500 bg-green-50';
-      case 'ACTION':
-        return 'border-blue-500 bg-blue-50';
-      case 'CONDITION':
-        return 'border-yellow-500 bg-yellow-50';
-      case 'DELAY':
-        return 'border-purple-500 bg-purple-50';
-      default:
-        return 'border-gray-500 bg-gray-50';
-    }
+const nodeStyles = {
+  TRIGGER: {
+    border: 'border-success-400',
+    bg: 'bg-gradient-to-br from-success-50 to-white',
+    iconBg: 'bg-success-100 text-success-600',
+    tag: 'text-success-600',
+  },
+  ACTION: {
+    border: 'border-primary-400',
+    bg: 'bg-gradient-to-br from-primary-50 to-white',
+    iconBg: 'bg-primary-100 text-primary-600',
+    tag: 'text-primary-600',
+  },
+  CONDITION: {
+    border: 'border-amber-400',
+    bg: 'bg-gradient-to-br from-amber-50 to-white',
+    iconBg: 'bg-amber-100 text-amber-600',
+    tag: 'text-amber-600',
+  },
+  DELAY: {
+    border: 'border-secondary-400',
+    bg: 'bg-gradient-to-br from-secondary-50 to-white',
+    iconBg: 'bg-secondary-100 text-secondary-600',
+    tag: 'text-secondary-600',
+  },
+  default: {
+    border: 'border-gray-300',
+    bg: 'bg-gradient-to-br from-gray-50 to-white',
+    iconBg: 'bg-gray-100 text-gray-600',
+    tag: 'text-gray-600',
+  },
+};
+
+const getIcon = (data) => {
+  switch (data.type) {
+    case 'TRIGGER':
+      if (data.subtype === 'GITHUB_PUSH') return GitBranch;
+      if (data.subtype === 'WEBHOOK') return Webhook;
+      return Play;
+    case 'ACTION':
+      if (data.subtype === 'github_comment') return MessageSquare;
+      if (data.subtype === 'github_issue') return AlertCircle;
+      return GitPullRequest;
+    case 'CONDITION':
+      return GitMerge;
+    case 'DELAY':
+      return Clock;
+    default:
+      return AlertCircle;
+  }
+};
+
+const subtypeLabel = (data) => {
+  if (data.subtype === 'GITHUB_PUSH') return 'on push';
+  return data.subtype ? data.subtype.toLowerCase().replace(/_/g, ' ') : '';
+};
+
+const CustomNode = ({ id, data, selected }) => {
+  const style = nodeStyles[data.type] || nodeStyles.default;
+  const Icon = getIcon(data);
+  const { onDelete } = useContext(NodeActionsContext);
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    onDelete(id);
   };
 
   return (
     <div
-      className={`px-4 py-3 rounded-lg border-2 shadow-sm min-w-[200px] ${getNodeColor()}`}
+      className={`group/node relative px-4 py-3 rounded-2xl border-2 min-w-[210px] transition-all duration-200 ${style.border} ${style.bg} ${
+        selected ? 'shadow-lifted ring-2 ring-primary-300 scale-[1.02]' : 'shadow-soft hover:shadow-md'
+      }`}
     >
+      <button
+        onClick={handleDelete}
+        title="Remove node"
+        aria-label="Remove node"
+        className="nodrag absolute -top-2.5 -right-2.5 w-6 h-6 rounded-full bg-white border border-gray-200 text-gray-400 shadow-sm flex items-center justify-center opacity-0 group-hover/node:opacity-100 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all duration-150 z-10"
+      >
+        <X size={13} strokeWidth={2.5} />
+      </button>
+
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 !bg-gray-400"
+        className="w-3 h-3 !bg-gray-400 !border-2 !border-white"
       />
 
-      <div className="flex items-center gap-2">
-        {getNodeIcon()}
+      <div className="flex items-center gap-3">
+        <div
+          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${style.iconBg}`}
+        >
+          <Icon size={18} />
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm text-gray-900 truncate">
+          <div className="font-semibold text-sm text-gray-900 truncate">
             {data.label}
           </div>
-          <div className="text-xs text-gray-600 capitalize">
+          <div className={`text-xs capitalize truncate ${style.tag}`}>
             {data.type?.toLowerCase()}
-            {data.subtype ? ` / ${data.subtype}` : ''}
+            {data.subtype ? ` · ${subtypeLabel(data)}` : ''}
           </div>
         </div>
       </div>
 
+      {data.type === 'TRIGGER' && data.subtype === 'GITHUB_PUSH' && (
+        <div className="mt-2 pt-2 border-t border-success-100 text-[11px] text-gray-500 truncate">
+          {data.config?.repo ? (
+            <>
+              <span className="font-medium text-gray-600">
+                {data.config.repo}
+              </span>
+              {' · '}
+              <span className="font-mono">{data.config.branch || 'any branch'}</span>
+            </>
+          ) : (
+            'Click to configure repo & branch'
+          )}
+        </div>
+      )}
+
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-3 h-3 !bg-gray-400"
+        className="w-3 h-3 !bg-gray-400 !border-2 !border-white"
       />
     </div>
   );
 };
 
-export default CustomNode;
+export default memo(CustomNode);

@@ -10,6 +10,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { workflowService } from '../services/workflowService';
+import { useToast } from '../context/ToastContext';
 import {
   Save,
   Play,
@@ -17,19 +18,111 @@ import {
   Plus,
   Workflow,
   Zap,
-  Sparkles,
+  Rocket,
   Settings,
+  GitBranch,
+  GitPullRequest,
+  AlertCircle,
+  MessageSquare,
+  GitMerge,
+  Webhook,
+  MousePointerClick,
+  Sparkles,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import NodeConfigPanel from '../components/NodeConfigPanel';
-import CustomNode from '../components/CustomNode';
+import CustomNode, { NodeActionsContext } from '../components/CustomNode';
 
 const nodeTypes = {
   custom: CustomNode,
 };
 
+const edgeOptions = {
+  type: 'smoothstep',
+  animated: true,
+  style: { strokeWidth: 2, stroke: '#a5b4fc' },
+  markerEnd: { type: 'arrowclosed', color: '#a5b4fc' },
+};
+
+const paletteSections = [
+  {
+    title: 'Triggers',
+    icon: Zap,
+    iconColor: 'text-success-500',
+    items: [
+      {
+        type: 'TRIGGER',
+        subtype: 'GITHUB_PUSH',
+        label: 'On Branch Push',
+        icon: GitBranch,
+        description: 'Runs when code is pushed to a branch',
+        highlight: true,
+      },
+      {
+        type: 'TRIGGER',
+        subtype: 'manual',
+        label: 'Manual Trigger',
+        icon: MousePointerClick,
+        description: 'Run the workflow manually',
+      },
+      {
+        type: 'TRIGGER',
+        subtype: 'WEBHOOK',
+        label: 'Webhook Trigger',
+        icon: Webhook,
+        description: 'Runs on an incoming HTTP request',
+      },
+    ],
+  },
+  {
+    title: 'Actions',
+    icon: Workflow,
+    iconColor: 'text-primary-500',
+    items: [
+      {
+        type: 'ACTION',
+        subtype: 'github_pr',
+        label: 'Create Pull Request',
+        icon: GitPullRequest,
+        description: 'Open a PR on GitHub',
+      },
+      {
+        type: 'ACTION',
+        subtype: 'github_issue',
+        label: 'Create Issue',
+        icon: AlertCircle,
+        description: 'Open a GitHub issue',
+      },
+      {
+        type: 'ACTION',
+        subtype: 'github_comment',
+        label: 'Comment on Issue',
+        icon: MessageSquare,
+        description: 'Post a comment on GitHub',
+      },
+    ],
+  },
+  {
+    title: 'Logic',
+    icon: Settings,
+    iconColor: 'text-amber-500',
+    items: [
+      {
+        type: 'CONDITION',
+        subtype: 'IF_ELSE',
+        label: 'Condition',
+        icon: GitMerge,
+        description: 'Branch on if / else logic',
+      },
+    ],
+  },
+];
+
 const WorkflowBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const [workflow, setWorkflow] = useState(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -39,75 +132,63 @@ const WorkflowBuilder = () => {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [running, setRunning] = useState(false);
-  const [error, setError] = useState('');
-  const errorTimerRef = useRef(null);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const nodeIdRef = useRef(0);
+
+  const nextNodeId = () => `node-${Date.now()}-${++nodeIdRef.current}`;
 
   useEffect(() => {
-    if (id) {
-      loadWorkflow(id);
-    }
-    return () => {
-      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const data = await workflowService.getWorkflow(id);
+        if (cancelled) return;
+        setWorkflow(data);
+
+        if (data?._rfNodes?.length > 0) {
+          setNodes(data._rfNodes);
+        } else {
+          setNodes([
+            {
+              id: 'trigger-1',
+              type: 'custom',
+              position: { x: 250, y: 50 },
+              data: {
+                label: 'Manual Trigger',
+                type: 'TRIGGER',
+                subtype: 'manual',
+                config: {},
+              },
+            },
+          ]);
+        }
+
+        if (data?._rfEdges?.length > 0) {
+          setEdges(data._rfEdges);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(
+            err.apiError?.message ||
+              err.response?.data?.message ||
+              'Failed to load workflow',
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
+
+    if (id) load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const showError = (msg) => {
-    setError(msg);
-    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-    errorTimerRef.current = setTimeout(() => setError(''), 5000);
-  };
-
-  const loadWorkflow = async (workflowId) => {
-    try {
-      const data = await workflowService.getWorkflow(workflowId);
-      setWorkflow(data);
-
-      if (data._rfNodes && data._rfNodes.length > 0) {
-        setNodes(data._rfNodes);
-      } else {
-        setNodes([
-          {
-            id: 'trigger-1',
-            type: 'custom',
-            position: { x: 250, y: 50 },
-            data: {
-              label: 'Manual Trigger',
-              type: 'TRIGGER',
-              subtype: 'manual',
-              config: {},
-            },
-          },
-        ]);
-      }
-
-      if (data._rfEdges && data._rfEdges.length > 0) {
-        setEdges(data._rfEdges);
-      }
-    } catch (err) {
-      showError(
-        err.apiError?.message ||
-          err.response?.data?.message ||
-          'Failed to load workflow',
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const onConnect = useCallback(
-    (params) =>
-      setEdges((eds) =>
-        addEdge(
-          {
-            ...params,
-            type: 'smoothstep',
-            animated: true,
-            style: { strokeWidth: 2, stroke: '#94a3b8' },
-            markerEnd: { type: 'arrowclosed', color: '#94a3b8' },
-          },
-          eds,
-        ),
-      ),
+    (params) => setEdges((eds) => addEdge({ ...params, ...edgeOptions }, eds)),
     [setEdges],
   );
 
@@ -123,27 +204,70 @@ const WorkflowBuilder = () => {
 
   const handleAddNode = (type, subtype, label) => {
     const newNode = {
-      id: `node-${Date.now()}`,
+      id: nextNodeId(),
       type: 'custom',
-      position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
-      data: {
-        label,
-        type,
-        subtype,
-        config: {},
+      position: {
+        x: 120 + Math.random() * 300,
+        y: 120 + Math.random() * 240,
       },
+      data: { label, type, subtype, config: {} },
     };
     setNodes((nds) => [...nds, newNode]);
+  };
+
+  // One-click template: push trigger -> auto PR
+  const handleAddAutoPrTemplate = () => {
+    const triggerId = nextNodeId();
+    const actionId = nextNodeId();
+
+    const triggerNode = {
+      id: triggerId,
+      type: 'custom',
+      position: { x: 280, y: 80 },
+      data: {
+        label: 'On Branch Push',
+        type: 'TRIGGER',
+        subtype: 'GITHUB_PUSH',
+        config: { repo: '', branch: '' },
+      },
+    };
+    const actionNode = {
+      id: actionId,
+      type: 'custom',
+      position: { x: 280, y: 260 },
+      data: {
+        label: 'Auto Create PR',
+        type: 'ACTION',
+        subtype: 'github_pr',
+        config: {
+          repo: '',
+          head: '{{trigger.branch}}',
+          base: 'main',
+          title: 'Auto PR: {{trigger.branch}} → main',
+          body: 'This pull request was created automatically by Flow after a push to {{trigger.branch}}.',
+        },
+      },
+    };
+
+    setNodes((nds) => [...nds, triggerNode, actionNode]);
+    setEdges((eds) =>
+      addEdge(
+        { id: `edge-${triggerId}-${actionId}`, source: triggerId, target: actionId, ...edgeOptions },
+        eds,
+      ),
+    );
+    toast.success(
+      'Auto-PR template added! Configure the repo and branches, then publish.',
+    );
   };
 
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
       await workflowService.updateDraft(id, nodes, edges);
-      showError('');
-      alert('Draft saved successfully');
+      toast.success('Draft saved successfully');
     } catch (err) {
-      showError(
+      toast.error(
         err.apiError?.message ||
           err.response?.data?.message ||
           'Failed to save draft',
@@ -153,11 +277,28 @@ const WorkflowBuilder = () => {
     }
   };
 
-  const handlePublish = async () => {
+  const validateWorkflow = () => {
     if (!nodes.some((n) => n.data?.type === 'TRIGGER')) {
-      alert('Workflow must have at least one trigger node');
-      return;
+      toast.error('Workflow must have at least one trigger node');
+      return false;
     }
+    const pushTrigger = nodes.find(
+      (n) => n.data?.subtype === 'GITHUB_PUSH',
+    );
+    if (pushTrigger) {
+      const { repo, branch } = pushTrigger.data.config || {};
+      if (!repo || !branch) {
+        toast.error(
+          'The "On Branch Push" trigger needs a repository and branch configured',
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handlePublish = async () => {
+    if (!validateWorkflow()) return;
 
     setPublishing(true);
     try {
@@ -165,9 +306,9 @@ const WorkflowBuilder = () => {
       await workflowService.publishWorkflow(id);
       const updated = await workflowService.getWorkflow(id);
       setWorkflow(updated);
-      alert('Workflow published successfully');
+      toast.success('Workflow published successfully');
     } catch (err) {
-      showError(
+      toast.error(
         err.apiError?.message ||
           err.response?.data?.message ||
           'Failed to publish workflow',
@@ -181,9 +322,9 @@ const WorkflowBuilder = () => {
     setRunning(true);
     try {
       await workflowService.runWorkflow(id);
-      alert('Workflow started successfully');
+      toast.success('Workflow run started');
     } catch (err) {
-      showError(
+      toast.error(
         err.apiError?.message ||
           err.response?.data?.message ||
           'Failed to run workflow',
@@ -193,17 +334,18 @@ const WorkflowBuilder = () => {
     }
   };
 
-  const handleSaveNodeConfig = (config) => {
+  const handleSaveNodeConfig = (config, label) => {
     if (!selectedNode) return;
     setNodes((nds) =>
       nds.map((node) =>
         node.id === selectedNode.id
-          ? { ...node, data: { ...node.data, config } }
+          ? { ...node, data: { ...node.data, config, label: label || node.data.label } }
           : node,
       ),
     );
     setIsConfigPanelOpen(false);
     setSelectedNode(null);
+    toast.success('Node configuration saved');
   };
 
   const handleDeleteNode = useCallback(
@@ -220,9 +362,9 @@ const WorkflowBuilder = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full animate-fade-in">
+      <div className="flex items-center justify-center h-screen animate-fade-in">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-secondary-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
           <div className="text-gray-600 font-medium">Loading workflow...</div>
         </div>
       </div>
@@ -230,167 +372,197 @@ const WorkflowBuilder = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-secondary-50">
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-primary-50">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between shadow-sm gap-2">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/dashboard')}
-            className="btn btn-secondary flex items-center gap-2 hover:bg-gray-100 transition-colors"
+            className="btn btn-secondary gap-2"
           >
-            <ArrowLeft size={20} />
-            Back
+            <ArrowLeft size={18} />
+            <span className="hidden sm:inline">Back</span>
           </button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-secondary-500 to-primary-500 rounded-xl flex items-center justify-center shadow-md">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center shadow-md shrink-0">
               <Workflow size={20} className="text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold text-gray-900 truncate">
                 {workflow?.name || 'New Workflow'}
               </h1>
-              <p className="text-sm text-gray-600 flex items-center gap-1">
-                <Zap size={14} className="text-accent-500" />
-                {workflow?.description || 'Create your automation workflow'}
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <span className="truncate hidden sm:inline">
+                  {workflow?.description || 'Create your automation workflow'}
+                </span>
                 {workflow?.status === 'PUBLISHED' && (
-                  <span className="ml-2 px-2 py-0.5 bg-success-100 text-success-700 text-xs rounded-full font-medium">
+                  <span className="badge bg-success-100 text-success-700">
                     Published v{workflow?.version_number}
                   </span>
                 )}
                 {workflow?.status === 'DRAFT' && (
-                  <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
+                  <span className="badge bg-gray-100 text-gray-600">
                     Draft v{workflow?.version_number}
                   </span>
                 )}
-              </p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleSaveDraft}
             disabled={saving}
-            className="btn btn-secondary flex items-center gap-2 disabled:opacity-50 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 border-0 transition-all duration-200"
+            className="btn btn-secondary gap-2"
           >
-            <Save size={18} />
-            {saving ? 'Saving...' : 'Save Draft'}
+            <Save size={17} />
+            <span className="hidden md:inline">
+              {saving ? 'Saving...' : 'Save Draft'}
+            </span>
           </button>
           <button
             onClick={handlePublish}
             disabled={publishing}
-            className="btn btn-primary flex items-center gap-2 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 shadow-md hover:shadow-lg transition-all duration-200 border-0 disabled:opacity-50"
+            className="btn btn-primary gap-2"
           >
-            <Settings size={18} className={publishing ? 'animate-spin' : ''} />
-            {publishing ? 'Publishing...' : 'Publish'}
+            <Rocket size={17} />
+            <span className="hidden md:inline">
+              {publishing ? 'Publishing...' : 'Publish'}
+            </span>
           </button>
           <button
             onClick={handleRun}
             disabled={running}
-            className="btn btn-primary flex items-center gap-2 bg-gradient-to-r from-success-600 to-success-500 hover:from-success-700 hover:to-success-600 shadow-md hover:shadow-lg transition-all duration-200 border-0 disabled:opacity-50"
+            className="btn btn-success gap-2"
           >
-            <Play size={18} />
-            {running ? 'Running...' : 'Run'}
+            <Play size={17} />
+            <span className="hidden md:inline">
+              {running ? 'Running...' : 'Run'}
+            </span>
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 relative">
-          <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-4 w-64 animate-slide-up">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Plus size={16} className="text-primary-600" />
-              Add Node
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-gray-600 mb-2 font-semibold flex items-center gap-1">
-                  <Zap size={12} className="text-accent-500" />
-                  Triggers
-                </p>
+          <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-2xl shadow-lifted border border-gray-100 w-72 animate-slide-up overflow-hidden">
+            <button
+              onClick={() => setPaletteOpen((o) => !o)}
+              className="w-full px-4 py-3 flex items-center justify-between text-sm font-semibold text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Plus size={16} className="text-primary-600" />
+                Add Node
+              </span>
+              {paletteOpen ? (
+                <ChevronDown size={16} className="text-gray-400" />
+              ) : (
+                <ChevronRight size={16} className="text-gray-400" />
+              )}
+            </button>
+
+            {paletteOpen && (
+              <div className="px-3 pb-3 space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto">
                 <button
-                  onClick={() =>
-                    handleAddNode('TRIGGER', 'manual', 'Manual Trigger')
-                  }
-                  className="btn btn-secondary text-xs w-full bg-gradient-to-r from-accent-50 to-accent-100 hover:from-accent-100 hover:to-accent-200 border-accent-300 transition-all duration-200"
+                  onClick={handleAddAutoPrTemplate}
+                  className="w-full p-3 rounded-xl bg-gradient-to-r from-primary-600 to-secondary-600 text-white text-left shadow-md hover:shadow-lifted transition-all duration-200 active:scale-[0.98] group"
                 >
-                  Manual Trigger
+                  <div className="flex items-center gap-2 font-semibold text-sm">
+                    <Sparkles
+                      size={16}
+                      className="group-hover:rotate-12 transition-transform"
+                    />
+                    Auto PR on Push
+                  </div>
+                  <p className="text-[11px] text-white/80 mt-1 leading-snug">
+                    One-click template: automatically open a pull request
+                    whenever code is pushed to your branch.
+                  </p>
                 </button>
-                <button
-                  onClick={() =>
-                    handleAddNode('TRIGGER', 'WEBHOOK', 'Webhook Trigger')
-                  }
-                  className="btn btn-secondary text-xs w-full mt-1 bg-gradient-to-r from-accent-50 to-accent-100 hover:from-accent-100 hover:to-accent-200 border-accent-300 transition-all duration-200"
-                >
-                  Webhook Trigger
-                </button>
+
+                {paletteSections.map((section) => (
+                  <div key={section.title}>
+                    <p className="text-xs text-gray-500 mb-2 font-semibold flex items-center gap-1.5 px-1">
+                      <section.icon size={12} className={section.iconColor} />
+                      {section.title}
+                    </p>
+                    <div className="space-y-1.5">
+                      {section.items.map((item) => (
+                        <button
+                          key={`${item.type}-${item.subtype}`}
+                          onClick={() =>
+                            handleAddNode(item.type, item.subtype, item.label)
+                          }
+                          className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all duration-200 hover:shadow-sm active:scale-[0.98] ${
+                            item.highlight
+                              ? 'border-success-200 bg-success-50/60 hover:border-success-300 hover:bg-success-50'
+                              : 'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              item.highlight
+                                ? 'bg-success-100 text-success-600'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            <item.icon size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-gray-900">
+                              {item.label}
+                            </p>
+                            <p className="text-[11px] text-gray-500 leading-snug">
+                              {item.description}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-xs text-gray-600 mb-2 font-semibold flex items-center gap-1">
-                  <Workflow size={12} className="text-secondary-500" />
-                  Actions
-                </p>
-                <button
-                  onClick={() =>
-                    handleAddNode('ACTION', 'github_pr', 'GitHub PR')
-                  }
-                  className="btn btn-secondary text-xs w-full mb-1 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 border-gray-300 transition-all duration-200"
-                >
-                  Create Pull Request
-                </button>
-                <button
-                  onClick={() =>
-                    handleAddNode('ACTION', 'github_issue', 'GitHub Issue')
-                  }
-                  className="btn btn-secondary text-xs w-full mb-1 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 border-gray-300 transition-all duration-200"
-                >
-                  Create Issue
-                </button>
-                <button
-                  onClick={() =>
-                    handleAddNode('ACTION', 'github_comment', 'GitHub Comment')
-                  }
-                  className="btn btn-secondary text-xs w-full bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 border-gray-300 transition-all duration-200"
-                >
-                  Comment on Issue
-                </button>
-              </div>
-              <div>
-                <p className="text-xs text-gray-600 mb-2 font-semibold flex items-center gap-1">
-                  <Settings size={12} className="text-primary-500" />
-                  Logic
-                </p>
-                <button
-                  onClick={() =>
-                    handleAddNode('CONDITION', 'IF_ELSE', 'Condition')
-                  }
-                  className="btn btn-secondary text-xs w-full bg-gradient-to-r from-primary-50 to-primary-100 hover:from-primary-100 hover:to-primary-200 border-primary-300 transition-all duration-200"
-                >
-                  If / Else Condition
-                </button>
-              </div>
-            </div>
+            )}
           </div>
 
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            nodeTypes={nodeTypes}
-            fitView
-            deleteKeyCode="Delete"
-          >
-            <Background />
-            <Controls />
-            <MiniMap />
-          </ReactFlow>
+          <NodeActionsContext.Provider value={{ onDelete: handleDeleteNode }}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              nodeTypes={nodeTypes}
+              fitView
+              deleteKeyCode={['Delete', 'Backspace']}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background color="#c7d2fe" gap={20} size={1.5} />
+              <Controls />
+              <MiniMap
+                nodeColor={(n) => {
+                  switch (n.data?.type) {
+                    case 'TRIGGER':
+                      return '#34d399';
+                    case 'ACTION':
+                      return '#818cf8';
+                    case 'CONDITION':
+                      return '#fbbf24';
+                    default:
+                      return '#d1d5db';
+                  }
+                }}
+                maskColor="rgba(238, 242, 255, 0.6)"
+              />
+            </ReactFlow>
+          </NodeActionsContext.Provider>
         </div>
 
         {isConfigPanelOpen && selectedNode && (
           <NodeConfigPanel
+            key={selectedNode.id}
             node={selectedNode}
             isOpen={isConfigPanelOpen}
             onClose={() => {
@@ -402,19 +574,6 @@ const WorkflowBuilder = () => {
           />
         )}
       </div>
-
-      {error && (
-        <div className="fixed bottom-4 right-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-lg animate-fade-in flex items-center gap-2 z-50">
-          <Sparkles size={18} />
-          {error}
-          <button
-            onClick={() => setError('')}
-            className="ml-2 text-red-400 hover:text-red-600"
-          >
-            ×
-          </button>
-        </div>
-      )}
     </div>
   );
 };
