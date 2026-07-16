@@ -1,35 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-gray-50 text-gray-900 antialiased;
   }
 }
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-xl font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
   }
-  
+
   .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700;
+    @apply bg-gradient-to-r from-primary-600 to-secondary-600 text-white shadow-md hover:shadow-lifted hover:from-primary-700 hover:to-secondary-700;
   }
-  
+
   .btn-secondary {
-    @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+    @apply bg-white text-gray-700 border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300;
   }
-  
+
+  .btn-success {
+    @apply bg-gradient-to-r from-success-600 to-accent-600 text-white shadow-md hover:shadow-lg hover:from-success-700 hover:to-accent-700;
+  }
+
   .btn-danger {
-    @apply bg-red-600 text-white hover:bg-red-700;
+    @apply bg-red-600 text-white shadow-md hover:bg-red-700;
   }
-  
+
   .input {
-    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm transition-all duration-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 hover:border-gray-300;
   }
-  
+
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200;
+    @apply bg-white rounded-2xl shadow-soft border border-gray-100;
   }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full;
+  }
+}
+
+/* React Flow theme tweaks */
+.react-flow__controls {
+  @apply !rounded-xl !shadow-soft !border !border-gray-200 overflow-hidden;
+}
+
+.react-flow__minimap {
+  @apply !rounded-xl !shadow-soft !border !border-gray-200;
+}
+
+.react-flow__attribution {
+  @apply !bg-transparent;
 }

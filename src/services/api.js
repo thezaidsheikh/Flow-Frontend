@@ -21,10 +21,17 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isAuthRequest = error.config?.url?.includes('/auth/');
+    if (error.response?.status === 401 && !isAuthRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('refresh_token');
-      window.location.href = '/login';
+      // Avoid a redirect loop if we're already on an auth page
+      if (
+        window.location.pathname !== '/login' &&
+        window.location.pathname !== '/signup'
+      ) {
+        window.location.href = '/login';
+      }
     }
 
     if (error.response?.data) {
