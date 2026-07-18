@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { workflowService } from '../services/workflowService';
 import { useToast } from '../context/ToastContext';
@@ -14,6 +14,10 @@ import {
   Search,
   Rocket,
   FileEdit,
+  Webhook,
+  Check,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 
 const StatCard = ({ icon: Icon, label, value, gradient }) => (
@@ -35,6 +39,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
+  const [editingNameId, setEditingNameId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const editInputRef = useRef(null);
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -100,12 +107,20 @@ const Dashboard = () => {
     }
   };
 
-  const handleDeleteWorkflow = (id, e) => {
+  const handleDeleteWorkflow = async (id, name, e) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to remove this workflow?'))
-      return;
-    setWorkflows((prev) => prev.filter((w) => w.id !== id));
-    toast.info('Workflow removed from your dashboard');
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
+    try {
+      await workflowService.deleteWorkflow(id);
+      setWorkflows((prev) => prev.filter((w) => w.id !== id));
+      toast.success(`Workflow "${name}" deleted`);
+    } catch (err) {
+      toast.error(
+        err.apiError?.message ||
+          err.response?.data?.message ||
+          'Failed to delete workflow',
+      );
+    }
   };
 
   const handleDuplicateWorkflow = async (workflow, e) => {
@@ -147,6 +162,40 @@ const Dashboard = () => {
           'Failed to duplicate workflow',
       );
     }
+  };
+
+  const startEditingName = (workflow, e) => {
+    e.stopPropagation();
+    setEditingNameId(workflow.id);
+    setEditingName(workflow.name);
+    setTimeout(() => editInputRef.current?.focus(), 50);
+  };
+
+  const cancelEditingName = (e) => {
+    e.stopPropagation();
+    setEditingNameId(null);
+    setEditingName('');
+  };
+
+  const saveEditingName = async (id, e) => {
+    e.stopPropagation();
+    const name = editingName.trim();
+    if (!name) return;
+    try {
+      const updated = await workflowService.updateWorkflowName(id, name);
+      setWorkflows((prev) =>
+        prev.map((w) => (w.id === id ? { ...w, name: updated.name } : w)),
+      );
+      toast.success('Workflow renamed');
+    } catch (err) {
+      toast.error(
+        err.apiError?.message ||
+          err.response?.data?.message ||
+          'Failed to rename workflow',
+      );
+    }
+    setEditingNameId(null);
+    setEditingName('');
   };
 
   const handleRunWorkflow = async (id, e) => {
@@ -278,20 +327,55 @@ const Dashboard = () => {
             >
               <div className="flex items-start justify-between mb-4 gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
-                        workflow.status === 'PUBLISHED'
-                          ? 'bg-gradient-to-br from-success-400 to-accent-500'
-                          : 'bg-gradient-to-br from-gray-300 to-gray-400'
-                      }`}
-                    >
-                      <Workflow size={16} className="text-white" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                          workflow.status === 'PUBLISHED'
+                            ? 'bg-gradient-to-br from-success-400 to-accent-500'
+                            : 'bg-gradient-to-br from-gray-300 to-gray-400'
+                        }`}
+                      >
+                        <Workflow size={16} className="text-white" />
+                      </div>
+                      {editingNameId === workflow.id ? (
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            ref={editInputRef}
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditingName(workflow.id, e);
+                              if (e.key === 'Escape') cancelEditingName(e);
+                            }}
+                            className="input py-1 px-2 text-sm flex-1 min-w-0"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <button
+                            onClick={(e) => saveEditingName(workflow.id, e)}
+                            className="p-1 rounded text-success-600 hover:bg-success-50 transition-colors"
+                            title="Save"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            onClick={cancelEditingName}
+                            className="p-1 rounded text-gray-400 hover:bg-gray-100 transition-colors"
+                            title="Cancel"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <h3
+                          className="text-lg font-semibold text-gray-900 truncate group-hover:text-primary-600 transition-colors cursor-pointer"
+                          onClick={(e) => startEditingName(workflow, e)}
+                          title="Click to rename"
+                        >
+                          {workflow.name}
+                        </h3>
+                      )}
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 truncate group-hover:text-primary-600 transition-colors">
-                      {workflow.name}
-                    </h3>
-                  </div>
                   {workflow.description && (
                     <p className="text-sm text-gray-500 line-clamp-2">
                       {workflow.description}
@@ -309,6 +393,21 @@ const Dashboard = () => {
                   {workflow.version_number}
                 </span>
               </div>
+
+              {workflow.webhook_url && (
+                <a
+                  href={workflow.webhook_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 mb-2 truncate"
+                  title={workflow.webhook_url}
+                >
+                  <Webhook size={12} />
+                  <span className="truncate">{workflow.webhook_url}</span>
+                  <ExternalLink size={10} className="shrink-0" />
+                </a>
+              )}
 
               <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
                 <Clock size={14} />
@@ -347,7 +446,7 @@ const Dashboard = () => {
                   Copy
                 </button>
                 <button
-                  onClick={(e) => handleDeleteWorkflow(workflow.id, e)}
+                  onClick={(e) => handleDeleteWorkflow(workflow.id, workflow.name, e)}
                   className="flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
                   title="Delete workflow"
                 >
