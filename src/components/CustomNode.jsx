@@ -137,6 +137,16 @@ const CustomNode = ({ id, data, selected }) => {
         </div>
       )}
 
+      {data.type === 'TRIGGER' && data.subtype === 'WEBHOOK' && (
+        <div className="mt-2 pt-2 border-t border-success-100 text-[11px] text-gray-500 truncate">
+          {data.config?.secret ? (
+            'HMAC-SHA256 signed'
+          ) : (
+            'No signature verification'
+          )}
+        </div>
+      )}
+
       <Handle
         type="source"
         position={Position.Bottom}

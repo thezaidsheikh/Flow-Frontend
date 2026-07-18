@@ -30,6 +30,9 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
+  Edit,
+  Check,
+  X,
 } from 'lucide-react';
 import NodeConfigPanel from '../components/NodeConfigPanel';
 import CustomNode, { NodeActionsContext } from '../components/CustomNode';
@@ -133,6 +136,9 @@ const WorkflowBuilder = () => {
   const [publishing, setPublishing] = useState(false);
   const [running, setRunning] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const nameInputRef = useRef(null);
   const nodeIdRef = useRef(0);
 
   const nextNodeId = () => `node-${Date.now()}-${++nodeIdRef.current}`;
@@ -348,6 +354,34 @@ const WorkflowBuilder = () => {
     toast.success('Node configuration saved');
   };
 
+  const handleStartRename = () => {
+    setNameInput(workflow?.name || '');
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
+  };
+
+  const handleSaveName = async () => {
+    const name = nameInput.trim();
+    if (!name || !workflow) return;
+    try {
+      const updated = await workflowService.updateWorkflowName(workflow.id, name);
+      setWorkflow((prev) => ({ ...prev, name: updated.name }));
+      toast.success('Workflow renamed');
+    } catch (err) {
+      toast.error(
+        err.apiError?.message ||
+          err.response?.data?.message ||
+          'Failed to rename workflow',
+      );
+    }
+    setEditingName(false);
+  };
+
+  const handleCancelRename = () => {
+    setEditingName(false);
+    setNameInput('');
+  };
+
   const handleDeleteNode = useCallback(
     (nodeId) => {
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
@@ -382,14 +416,53 @@ const WorkflowBuilder = () => {
             <ArrowLeft size={18} />
             <span className="hidden sm:inline">Back</span>
           </button>
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 group">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center shadow-md shrink-0">
               <Workflow size={20} className="text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold text-gray-900 truncate">
-                {workflow?.name || 'New Workflow'}
-              </h1>
+              {editingName ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName();
+                      if (e.key === 'Escape') handleCancelRename();
+                    }}
+                    className="input py-1 px-2 text-lg font-semibold"
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    className="p-1.5 rounded text-success-600 hover:bg-success-50 transition-colors"
+                    title="Save name"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={handleCancelRename}
+                    className="p-1.5 rounded text-gray-400 hover:bg-gray-100 transition-colors"
+                    title="Cancel"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-lg font-semibold text-gray-900 truncate">
+                    {workflow?.name || 'New Workflow'}
+                  </h1>
+                  <button
+                    onClick={handleStartRename}
+                    className="p-1 rounded text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Rename workflow"
+                  >
+                    <Edit size={14} />
+                  </button>
+                </div>
+              )}
               <div className="text-xs text-gray-500 flex items-center gap-2">
                 <span className="truncate hidden sm:inline">
                   {workflow?.description || 'Create your automation workflow'}

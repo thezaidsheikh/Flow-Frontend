@@ -1,0 +1,8 @@
+{
+  "references": {
+    "shared-project-b": {
+      "path": "../flow",
+      "description": "Use this context to share type definitions, core utilities, and logic from flow."
+    }
+  }
+}

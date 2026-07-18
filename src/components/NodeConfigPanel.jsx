@@ -4,9 +4,9 @@ import {
   Save,
   Trash2,
   GitBranch,
+  Info,
   Copy,
   Check,
-  Info,
 } from 'lucide-react';
 import { credentialService } from '../services/credentialService';
 
@@ -60,20 +60,57 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
     onSave(config, label.trim() || node.data.label);
   };
 
-  const webhookUrl = () => {
-    const repo = config.repo || 'owner/repo';
-    const branch = config.branch || 'main';
-    return `${window.location.origin}/api/v1/webhooks/github/push?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`;
-  };
-
-  const handleCopyWebhook = async () => {
+  const handleCopyWebhook = async (url) => {
     try {
-      await navigator.clipboard.writeText(webhookUrl());
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard unavailable (e.g. insecure context) — ignore silently
+      // Clipboard unavailable — ignore
     }
+  };
+
+  const WebhookUrlSection = () => {
+    const url = node.data.webhookUrl;
+    if (!url) {
+      return (
+        <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+          <p className="text-xs font-medium text-gray-600 mb-1">
+            Webhook URL
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Publish the workflow to generate the webhook URL.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+        <p className="text-xs font-medium text-gray-600 mb-2">
+          Webhook URL
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg px-2 py-1.5 flex-1 truncate">
+            {url}
+          </code>
+          <button
+            type="button"
+            onClick={() => handleCopyWebhook(url)}
+            className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-primary-600 hover:border-primary-300 transition-colors shrink-0"
+            title="Copy webhook URL"
+          >
+            {copied ? (
+              <Check size={14} className="text-success-600" />
+            ) : (
+              <Copy size={14} />
+            )}
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-500 mt-2">
+          Send HTTP POST requests to this URL to trigger the workflow.
+        </p>
+      </div>
+    );
   };
 
   const renderCredentialSelect = () => (
@@ -144,59 +181,46 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
               </div>
             </Field>
             {renderCredentialSelect()}
-            <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
-              <p className="text-xs font-medium text-gray-600 mb-2">
-                GitHub Webhook URL
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg px-2 py-1.5 flex-1 truncate">
-                  {webhookUrl()}
-                </code>
-                <button
-                  type="button"
-                  onClick={handleCopyWebhook}
-                  className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-primary-600 hover:border-primary-300 transition-colors shrink-0"
-                  title="Copy webhook URL"
-                >
-                  {copied ? (
-                    <Check size={14} className="text-success-600" />
-                  ) : (
-                    <Copy size={14} />
-                  )}
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-500 mt-2">
-                Add this URL as a webhook in your GitHub repo (Settings →
-                Webhooks → push events).
-              </p>
-            </div>
+            <Field
+              label="Webhook Secret (optional)"
+              hint="HMAC-SHA256 secret for verifying GitHub webhook payloads"
+            >
+              <input
+                type="password"
+                value={config.secret || ''}
+                onChange={(e) => handleConfigChange('secret', e.target.value)}
+                className="input"
+                placeholder="your-webhook-secret"
+              />
+            </Field>
+            <WebhookUrlSection />
           </>
         );
 
       case 'WEBHOOK':
         return (
           <>
-            <Field label="Webhook Path">
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex gap-2">
+              <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700 leading-relaxed">
+                This trigger fires whenever an HTTP POST request is made to the
+                webhook URL. The URL is generated automatically when you publish
+                the workflow.
+              </p>
+            </div>
+            <Field
+              label="Secret (optional)"
+              hint="Used for HMAC-SHA256 signature verification. Leave blank to skip verification."
+            >
               <input
-                type="text"
-                value={config.path || ''}
-                onChange={(e) => handleConfigChange('path', e.target.value)}
+                type="password"
+                value={config.secret || ''}
+                onChange={(e) => handleConfigChange('secret', e.target.value)}
                 className="input"
-                placeholder="/webhook/my-trigger"
+                placeholder="your-webhook-secret"
               />
             </Field>
-            <Field label="HTTP Method">
-              <select
-                value={config.method || 'POST'}
-                onChange={(e) => handleConfigChange('method', e.target.value)}
-                className="input"
-              >
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-                <option value="PUT">PUT</option>
-                <option value="PATCH">PATCH</option>
-              </select>
-            </Field>
+            <WebhookUrlSection />
           </>
         );
 

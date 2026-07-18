@@ -20,6 +20,7 @@ const convertNodeToReactFlow = (node) => ({
     subtype: node.sub_type || '',
     config: node.config || {},
     serverId: node.id,
+    webhookUrl: node.webhook_url || null,
   },
 });
 
@@ -70,6 +71,16 @@ export const workflowService = {
       edges: edges.map(convertEdgeToAPI),
     };
     const response = await api.put(`/workflows/${id}/draft`, payload);
+    return response.data?.data;
+  },
+
+  deleteWorkflow: async (id) => {
+    const response = await api.delete(`/workflows/${id}`);
+    return response.data;
+  },
+
+  updateWorkflowName: async (id, name) => {
+    const response = await api.patch(`/workflows/${id}/name`, { name });
     return response.data?.data;
   },
 
