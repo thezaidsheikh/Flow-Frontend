@@ -209,4 +209,4 @@ The frontend integrates with the Flow backend API:
 
 ## License
 
-This project is part of the Flow workflow automation platform capstone project.
+This project is part of the Flow workflow automation platform capstone project
