@@ -6,6 +6,8 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import Credentials from './pages/Credentials';
+import RunDetail from './pages/RunDetail';
+import WorkflowList from './pages/WorkflowList';
 
 const AppRouter = () => {
   return (
@@ -21,14 +23,15 @@ const AppRouter = () => {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to="/workflows" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="workflows" element={<Dashboard />} />
+        <Route path="workflows" element={<WorkflowList />} />
         <Route path="workflow/:id" element={<WorkflowBuilder />} />
+        <Route path="runs/:runId" element={<RunDetail />} />
         <Route path="credentials" element={<Credentials />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/workflows" replace />} />
     </Routes>
   );
 };
