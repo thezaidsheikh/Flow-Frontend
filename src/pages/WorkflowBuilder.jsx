@@ -42,10 +42,10 @@ const nodeTypes = {
 };
 
 const edgeOptions = {
-  type: 'smoothstep',
+  type: 'default',
   animated: true,
-  style: { strokeWidth: 2, stroke: '#a5b4fc' },
-  markerEnd: { type: 'arrowclosed', color: '#a5b4fc' },
+  style: { strokeWidth: 3, stroke: '#6366f1' },
+  markerEnd: { type: 'arrowclosed', color: '#6366f1' },
 };
 
 const paletteSections = [
@@ -57,9 +57,9 @@ const paletteSections = [
       {
         type: 'TRIGGER',
         subtype: 'GITHUB_PUSH',
-        label: 'On Branch Push',
+        label: 'GitHub Branch Push',
         icon: GitBranch,
-        description: 'Runs when code is pushed to a branch',
+        description: 'Auto-creates a webhook on your GitHub repo to trigger on pushes',
         highlight: true,
       },
       {
@@ -138,8 +138,10 @@ const WorkflowBuilder = () => {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
   const nameInputRef = useRef(null);
   const nodeIdRef = useRef(0);
+  const lastSavedRef = useRef(null);
 
   const nextNodeId = () => `node-${Date.now()}-${++nodeIdRef.current}`;
 
@@ -152,10 +154,12 @@ const WorkflowBuilder = () => {
         if (cancelled) return;
         setWorkflow(data);
 
+        let initialNodes;
         if (data?._rfNodes?.length > 0) {
-          setNodes(data._rfNodes);
+          initialNodes = data._rfNodes;
+          setNodes(initialNodes);
         } else {
-          setNodes([
+          initialNodes = [
             {
               id: 'trigger-1',
               type: 'custom',
@@ -167,12 +171,28 @@ const WorkflowBuilder = () => {
                 config: {},
               },
             },
-          ]);
+          ];
+          setNodes(initialNodes);
         }
 
+        let initialEdges;
         if (data?._rfEdges?.length > 0) {
-          setEdges(data._rfEdges);
+          initialEdges = data._rfEdges;
+          setEdges(initialEdges);
+        } else {
+          initialEdges = [];
         }
+
+        console.log('[Flow] Loaded nodes:', initialNodes.length, 'edges:', initialEdges.length);
+        if (initialEdges.length > 0) {
+          const firstEdge = initialEdges[0];
+          const sourceExists = initialNodes.find(n => n.id === firstEdge.source);
+          const targetExists = initialNodes.find(n => n.id === firstEdge.target);
+          if (!sourceExists) console.warn('[Flow] Edge source not found:', firstEdge.source);
+          if (!targetExists) console.warn('[Flow] Edge target not found:', firstEdge.target);
+        }
+
+        lastSavedRef.current = JSON.stringify({ nodes: initialNodes, edges: initialEdges });
       } catch (err) {
         if (!cancelled) {
           toast.error(
@@ -209,6 +229,12 @@ const WorkflowBuilder = () => {
   }, []);
 
   const handleAddNode = (type, subtype, label) => {
+    const defaultConfig = {};
+    if (type === 'ACTION' && subtype === 'github_pr') {
+      defaultConfig.head = '{{trigger.source_branch}}';
+      defaultConfig.base = '';
+      defaultConfig.repo = '';
+    }
     const newNode = {
       id: nextNodeId(),
       type: 'custom',
@@ -216,7 +242,7 @@ const WorkflowBuilder = () => {
         x: 120 + Math.random() * 300,
         y: 120 + Math.random() * 240,
       },
-      data: { label, type, subtype, config: {} },
+      data: { label, type, subtype, config: defaultConfig },
     };
     setNodes((nds) => [...nds, newNode]);
   };
@@ -231,7 +257,7 @@ const WorkflowBuilder = () => {
       type: 'custom',
       position: { x: 280, y: 80 },
       data: {
-        label: 'On Branch Push',
+        label: 'GitHub Branch Push',
         type: 'TRIGGER',
         subtype: 'GITHUB_PUSH',
         config: { repo: '', branch: '' },
@@ -247,10 +273,10 @@ const WorkflowBuilder = () => {
         subtype: 'github_pr',
         config: {
           repo: '',
-          head: '{{trigger.branch}}',
+          head: '{{trigger.source_branch}}',
           base: 'main',
-          title: 'Auto PR: {{trigger.branch}} → main',
-          body: 'This pull request was created automatically by Flow after a push to {{trigger.branch}}.',
+          title: 'Auto PR: {{trigger.source_branch}} → main',
+          body: 'This pull request was created automatically by Flow after a push to {{trigger.source_branch}}.',
         },
       },
     };
@@ -267,10 +293,18 @@ const WorkflowBuilder = () => {
     );
   };
 
+  useEffect(() => {
+    if (!lastSavedRef.current) return;
+    const current = JSON.stringify({ nodes, edges });
+    setHasChanges(current !== lastSavedRef.current);
+  }, [nodes, edges]);
+
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
       await workflowService.updateDraft(id, nodes, edges);
+      lastSavedRef.current = JSON.stringify({ nodes, edges });
+      setHasChanges(false);
       toast.success('Draft saved successfully');
     } catch (err) {
       toast.error(
@@ -292,10 +326,10 @@ const WorkflowBuilder = () => {
       (n) => n.data?.subtype === 'GITHUB_PUSH',
     );
     if (pushTrigger) {
-      const { repo, branch } = pushTrigger.data.config || {};
-      if (!repo || !branch) {
+      const { repo } = pushTrigger.data.config || {};
+      if (!repo) {
         toast.error(
-          'The "On Branch Push" trigger needs a repository and branch configured',
+          'The "GitHub Branch Push" trigger needs a repository configured',
         );
         return false;
       }
@@ -485,12 +519,14 @@ const WorkflowBuilder = () => {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleSaveDraft}
-            disabled={saving}
-            className="btn btn-secondary gap-2"
+            disabled={saving || !hasChanges}
+            className={`btn btn-secondary gap-2 ${
+              !hasChanges || saving ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
             <Save size={17} />
             <span className="hidden md:inline">
-              {saving ? 'Saving...' : 'Save Draft'}
+              {saving ? 'Saving...' : hasChanges ? 'Save Draft' : 'Saved'}
             </span>
           </button>
           <button
@@ -600,6 +636,7 @@ const WorkflowBuilder = () => {
 
           <NodeActionsContext.Provider value={{ onDelete: handleDeleteNode }}>
             <ReactFlow
+              key={`flow-${id}-${edges.length}`}
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChange}
@@ -608,6 +645,8 @@ const WorkflowBuilder = () => {
               onNodeClick={onNodeClick}
               onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
+              edgesFocusable={false}
+              nodesDraggable={true}
               fitView
               deleteKeyCode={['Delete', 'Backspace']}
               proOptions={{ hideAttribution: true }}
