@@ -10,10 +10,11 @@ import {
 } from 'lucide-react';
 import { credentialService } from '../services/credentialService';
 
-const Field = ({ label, children, hint }) => (
+const Field = ({ label, children, hint, required }) => (
   <div className="mb-4">
     <label className="block text-sm font-medium text-gray-700 mb-1">
       {label}
+      {required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
     {children}
     {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
@@ -114,7 +115,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
   };
 
   const renderCredentialSelect = () => (
-    <Field label="Credential">
+    <Field label="Credential" required>
       {loading ? (
         <div className="text-sm text-gray-500">Loading credentials...</div>
       ) : (
@@ -147,13 +148,14 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
             <div className="mb-4 p-3 bg-primary-50 border border-primary-100 rounded-xl flex gap-2">
               <Info size={16} className="text-primary-600 shrink-0 mt-0.5" />
               <p className="text-xs text-primary-700 leading-relaxed">
-                This trigger fires automatically whenever code is pushed to the
-                watched branch. Connect it to a{' '}
+                Automatically registers a webhook on your GitHub repo when
+                published. Fires whenever code is pushed to the watched branch.
+                Connect it to a{' '}
                 <span className="font-semibold">Create Pull Request</span>{' '}
-                action to auto-open a PR to your target branch.
+                action to auto-open a PR.
               </p>
             </div>
-            <Field label="Repository" hint="Format: owner/repo">
+            <Field label="Repository" hint="Format: owner/repo" required>
               <input
                 type="text"
                 value={config.repo || ''}
@@ -163,8 +165,8 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
               />
             </Field>
             <Field
-              label="Branch to Watch"
-              hint="Workflow runs when code is pushed to this branch"
+              label="Source Branch (filter)"
+              hint="Leave empty to fire on ALL pushes. Use * wildcard (e.g., feature/*) to filter."
             >
               <div className="relative">
                 <GitBranch
@@ -227,7 +229,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
       case 'github_pr':
         return (
           <>
-            <Field label="Repository" hint="Format: owner/repo">
+            <Field label="Repository" hint="Format: owner/repo" required>
               <input
                 type="text"
                 value={config.repo || ''}
@@ -238,14 +240,14 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
             </Field>
             <Field
               label="Source Branch"
-              hint="Use {{trigger.branch}} to pick up the pushed branch automatically"
+              hint="Leave empty to use the branch pushed by the trigger. Use {{trigger.source_branch}} for auto-detect."
             >
               <input
                 type="text"
                 value={config.head || ''}
                 onChange={(e) => handleConfigChange('head', e.target.value)}
                 className="input"
-                placeholder="{{trigger.branch}}"
+                placeholder="{{trigger.source_branch}}"
               />
             </Field>
             <Field
@@ -266,7 +268,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
                 value={config.title || ''}
                 onChange={(e) => handleConfigChange('title', e.target.value)}
                 className="input"
-                placeholder="Auto PR: {{trigger.branch}} → main"
+                placeholder="Auto PR: {{trigger.source_branch}} → main"
               />
             </Field>
             <Field label="Body">
@@ -285,7 +287,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
       case 'github_issue':
         return (
           <>
-            <Field label="Repository" hint="Format: owner/repo">
+            <Field label="Repository" hint="Format: owner/repo" required>
               <input
                 type="text"
                 value={config.repo || ''}
@@ -294,7 +296,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
                 placeholder="owner/repo"
               />
             </Field>
-            <Field label="Title">
+            <Field label="Title" required>
               <input
                 type="text"
                 value={config.title || ''}
@@ -319,7 +321,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
       case 'github_comment':
         return (
           <>
-            <Field label="Repository" hint="Format: owner/repo">
+            <Field label="Repository" hint="Format: owner/repo" required>
               <input
                 type="text"
                 value={config.repo || ''}
@@ -328,7 +330,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
                 placeholder="owner/repo"
               />
             </Field>
-            <Field label="Issue Number">
+            <Field label="Issue Number" required>
               <input
                 type="number"
                 value={config.issueNumber || ''}
@@ -339,7 +341,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
                 placeholder="123"
               />
             </Field>
-            <Field label="Comment">
+            <Field label="Comment" required>
               <textarea
                 value={config.comment || ''}
                 onChange={(e) => handleConfigChange('comment', e.target.value)}
@@ -367,7 +369,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
                 <option value="previous">Previous Node</option>
               </select>
             </Field>
-            <Field label="Field">
+            <Field label="Field" required>
               <input
                 type="text"
                 value={config.field || config.variable || ''}
@@ -410,7 +412,7 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
       case 'DELAY':
         return (
           <>
-            <Field label="Duration">
+            <Field label="Duration" required>
               <input
                 type="number"
                 value={config.duration ?? ''}
@@ -462,16 +464,6 @@ const NodeConfigPanel = ({ node, isOpen, onClose, onSave, onDelete }) => {
             <X size={20} />
           </button>
         </div>
-
-        <Field label="Node Name">
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className="input"
-            placeholder="Node name"
-          />
-        </Field>
 
         <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
           <p className="text-xs text-gray-500 mb-1">Node Type</p>

@@ -1,7 +1,7 @@
 import api from './api';
 
 const convertNodeToAPI = (node) => ({
-  id: node.data?.serverId || undefined,
+  id: node.data?.serverId || node.id,
   name: node.data.label,
   type: node.data.type,
   sub_type: node.data.subtype || null,
@@ -36,10 +36,10 @@ const convertEdgeToReactFlow = (edge) => ({
   source: edge.source_node_id,
   target: edge.target_node_id,
   label: edge.label || undefined,
-  type: 'smoothstep',
+  type: 'default',
   animated: true,
-  style: { strokeWidth: 2, stroke: '#94a3b8' },
-  markerEnd: { type: 'arrowclosed', color: '#94a3b8' },
+  style: { strokeWidth: 3, stroke: '#6366f1' },
+  markerEnd: { type: 'arrowclosed', color: '#6366f1' },
 });
 
 export const workflowService = {
